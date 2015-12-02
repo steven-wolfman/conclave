@@ -1,0 +1,42 @@
+Walkthrough of the game.
+
+
+
+
+Judge chooses a topic.
+
+Puppies
+
+Then, each other player submits their response.
+
+Cute
+Kitties
+Dog
+101
+poop
+
+Then back to the judge. The judge sees them in random order:
+
+Dog
+101
+Kitties
+poop
+Cute
+
+Then the judge has 6 points that they can hand out by tapping the answers.
+
+ 1 Dog
+ 1 101
+ 1 Kitties
+ 2 poop
+ 1 Cute
+
+Then everyone sees the result:
+
+ 1 Cute		  Nancy
+ 1 Kitties	Allison
+ 1 Dog		   Lisa
+ 1 101		   Hallie
+ 2 poop		  Kelley
+
+Then repeat, with the judge rotating, ending after the first complete round in which someone goes over 10 points.

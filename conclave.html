@@ -1,0 +1,96 @@
+<head>
+  <title>Conclave</title>
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>Conclave</h1> {{> loginButtons}}
+    </header>
+
+    {{> Template.dynamic template=getCurrentTemplate}}
+  </div>
+</body>
+
+<template name="confused">
+  <span class="info">
+    Sorry. Something has gone wrong. Maybe refresh?
+  </span>
+</template>
+
+<template name="nobody">
+  <span class="info">
+    Please log in to participate!
+  </span>
+</template>
+
+<template name="join">
+  <button type="button" id="join" name="join" class="join">Join</button>
+</template>
+
+<template name="makeChallenge">
+  <form class="makeChallenge">
+    <input type="textarea" name="text" rows="4" placeholder="Enter your challenge here!" class="challengeEntryBox" />
+    <input type="submit" value="Submit" />
+  </form>
+</template>
+
+<template name="judgeAwaitsResponses">
+  <p class="info">Please wait while players respond..</p>
+  <p class="info">{{> responsesReceived}}</p>
+</template>
+
+<template name="responsesReceived">
+  <span class="responsesReceived">Responses: {{getNumResponses}}/{{getNumExpectedResponses}}</span>
+</template>
+
+<template name="voteOnResponses">
+  <span class="info">Distribute {{getVotesRemaining}} votes:</span>
+  <ul>
+    {{#each response in responses}} {{> voteResponse response}} {{/each}}
+  </ul>
+  <button type="button" class="sendVotesButton" disabled="{{#if areAllVotesIn}}{{else}}disabled{{/if}}">Send</button>
+</template>
+
+<template name="voteResponse">
+  <li class="responseForJudge">
+    <span class="responseForJudge">{{text}}</span> {{!-- Need the {{#each ... in ...}} form to keep the response context around. --}} {{#each i in (numToIterable votes)}}
+    <button type="button" class="unvoteButton">&#x2605;</button>
+    {{/each}}
+    <button type="button" class="voteButton" disabled="{{#if areAllVotesIn}}disabled{{/if}}">+</button>
+  </li>
+</template>
+
+<template name="wait">
+  <span class="wait">Hang tight! We're waiting on the judge!</span>
+</template>
+
+<template name="makeResponse">
+  <p class="challengeForRespondent">
+    <span class="challengeForRespondent">{{getChallenge}}</span>
+  </p>
+  <form class="makeResponse">
+    <input type="textarea" name="text" rows="4" placeholder="Enter a response here!" class="responseEntryBox" />
+    {{!-- {{#each i in (numToIterable getNumResponsesPerPlayer)}}
+      <input type="textarea" name="text" rows="4" placeholder="Enter a response here!" class="responseEntryBox" />
+    {{/each}}
+    --}}
+    <input type="submit" value="Submit" />
+  </form>
+  {{responsesReceived}}
+</template>
+
+<template name="endGame">
+  <span class="info">
+    <p>Game over!</p>
+    <p>Scores:
+      <ul>
+        {{#each player in players}}
+          <li class="score">
+            {{getPlayerName player._id}}:
+            {{getPlayerScore player._id}}
+            </li> {{/each}}
+  </ul>
+  </p>
+  </span>
+</template>
