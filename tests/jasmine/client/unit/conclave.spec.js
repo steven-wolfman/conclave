@@ -11,7 +11,6 @@ describe('conclave general', function() {
     beforeEach(function() {
         console.log("beforeEach");
         MeteorStubs.install();
-        //mock(global, 'Turns');
     });
 
     afterEach(function() {
@@ -22,10 +21,9 @@ describe('conclave general', function() {
     describe('global functions', function() {
         describe('getCurrentTurn', function() {
             it('produces the current turn when there is one', function() {
-                expect(true).toBe(true);
-                //var result = {};
-                //spyOn(Turns, 'findOne').and.returnValue(result);
-                //expect(getCurrentTurn()).toBe(result);
+                var result = {};
+                spyOn(Turns, 'findOne').and.returnValue(result);
+                expect(ConclaveService.getCurrentTurn()).toBe(result);
             });
         });
     });

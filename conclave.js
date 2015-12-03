@@ -18,301 +18,311 @@
 // Issues with the plan: Is it easy to query to get the first null entry in a
 // list that sits inside a document?  
 
+
 // Stripped down version assumptions:
 // + All players are in the game
 // + All players except the judge are responders
 // + There is only one turn
 // + Judging order is by player ID
-var Players = new Mongo.Collection("players"); /* _id (Meteor.userId()) */
-var Turns = new Mongo.Collection("turns"); /* _id, judgeId, challenge, isDoneVote  */ // Presently JUST ONE
-var Responses = new Mongo.Collection("responses"); /* _id (Meteor.userId() of respondent), text, votes, isSubmitted */
+Players = new Mongo.Collection("players"); /* _id (Meteor.userId()) */
+Turns = new Mongo.Collection("turns"); /* _id, judgeId, challenge, isDoneVote  */ // Presently JUST ONE
+Responses = new Mongo.Collection("responses"); /* _id (Meteor.userId() of respondent), text, votes, isSubmitted */
 
-/**
- * Produce the current turn.
- * 
- * @returns {?document} The Meteor document representing the turn or null if there is none.
- */
-function getCurrentTurn() {
-  return Turns.findOne({});
-}
 
-/**
- * @returns {natural} The number of votes left to cast.
- */
-function _getVotesRemaining() {
-  var votesLeft = 6;
-  Responses.find({}, {
-    fields: {
-      votes: 1
+// Following
+// https://github.com/meteor-velocity/velocity-examples/blob/master/leaderboard-jasmine/leaderboard.js:
+// Putting all my global helpers for the moment in one singleton through which I access.
+ConclaveService = {
+    /**
+     * Produce the current turn.
+     * 
+     * @returns {?document} The Meteor document representing the turn or null if there is none.
+     */
+    getCurrentTurn: function() {
+	return Turns.findOne({});
+    },
+
+    /**
+     * @returns {natural} The number of votes left to cast.
+     */
+    getVotesRemaining: function() {
+	var votesLeft = 6;
+	Responses.find({}, {
+	    fields: {
+		votes: 1
+	    }
+	}).forEach(function(resp) {
+	    votesLeft = votesLeft - resp.votes;
+	});
+	return votesLeft;
+    },
+
+    /**
+     * @returns {natural} The number of players expected to produce responses.
+     */
+    getNumResponders: function() {
+	return Responses.find({}).count();
+    },
+
+    /**
+     * @returns {natural} The number of responses expected per player.
+     */
+    getNumResponsesPerPlayer: function() {
+	// TODO: set up 3-player games to take in 2 responses per player.
+	//return getNumResponders() < 3 ? 2 : 1;
+	return 1;
+    },
+
+    /**
+     * @returns {natural} The total number of expected responses.
+     */
+    getNumExpectedResponses: function() {
+	return ConclaveService.getNumResponsesPerPlayer() * ConclaveService.getNumResponders();
+    },
+
+    /**
+     * @returns {boolean} Have all players expected to respond submitted responses?
+     */
+    haveAllPlayersResponded: function() {
+	var turn = ConclaveService.getCurrentTurn();
+
+	// Double-check:
+	// 1) No one is listed as unsubmitted.
+	// 2) Everyone is listed as submitted.
+	return turn &&
+	    Responses.find({
+		isSubmitted: false
+	    }).count() === 0 &&
+	    (Players.find({ // non-judges
+		    _id: {
+			$ne: turn.judgeId
+		    }
+	    }).map(elt => Responses.find({ // that have submitted (count is 1)
+		_id: elt._id,
+		isSubmitted: true
+	    }).count() === 1).every(x => x));
+    },
+
+    /**
+     * An "isIn" function for determining what state the UI is in.
+     * 
+     * @returns {boolean} Is the current player the judge in the process of making the challenge?
+     */
+    isInJudgeMakingChallenge: function() {
+	// To be in "judge making challenge" state:
+	// + This player is the judge
+	// + There is no challenge yet
+	// ASSUMPTION: only one turn.
+	var turn = ConclaveService.getCurrentTurn();
+	var uid = Meteor.userId();
+
+	return turn && uid &&
+	    // I am the judge, and
+	    turn.judgeId === uid &&
+	    // There is no challenge
+	    !turn.challenge;
+    },
+
+    /**
+     * An "isIn" function for determining what state the UI is in.
+     * 
+     * @returns {boolean} Is the user in need of authentication before proceeding?
+     */
+    isInAuthenticating: function() {
+	return !Meteor.userId();
+    },
+
+    /**
+     * An "isIn" function for determining what state the UI is in.
+     * 
+     * @returns {boolean} Is the user looking for a game to participate in?
+     */
+    isInFindingGame: function() {
+	// ASSUMPTION: all players are in a single game.
+	// Then, if we're in players, we're in a game.
+
+	var uid = Meteor.userId();
+
+	return uid &&
+	    // I am not a player.
+	    (Players.find({
+		_id: uid
+	    }).count() === 0);
+    },
+
+    /**
+     * An "isIn" function for determining what state the UI is in.
+     * 
+     * @returns {boolean} Is the current player the judge awaiting outstanding responses to their challenge?
+     */
+    isInJudgeAwaitingResponses: function() {
+	var uid = Meteor.userId();
+	var turn = ConclaveService.getCurrentTurn();
+
+	return turn && uid &&
+	    // I am a judge, and
+	    (turn.judgeId === uid) &&
+	    // There is a challenge, but
+	    turn.challenge &&
+	    // not all players have responded.
+	    !ConclaveService.haveAllPlayersResponded();
+    },
+
+    /**
+     * An "isIn" function for determining what state the UI is in.
+     * 
+     * @returns {boolean} Is the current player the judge in the process of voting on submitted responses?
+     */
+    isInJudgeVoting: function() {
+	var uid = Meteor.userId();
+	var turn = ConclaveService.getCurrentTurn();
+
+	return turn && uid &&
+	    // I am the judge and
+	    turn.judgeId === uid &&
+	    // There is a challenge and
+	    turn.challenge &&
+	    // All players have responded but
+	    ConclaveService.haveAllPlayersResponded() &&
+	    // I am not done voting
+	    !turn.isDoneVote;
+    },
+
+    /**
+     * An "isIn" function for determining what state the UI is in.
+     * 
+     * @returns {boolean} Is the current player a respondent awaiting the judge's votes on responses?
+     */
+    isInRespondentAwaitingVoting: function() {
+	var uid = Meteor.userId();
+	var turn = ConclaveService.getCurrentTurn();
+
+	return turn && uid &&
+	    // I am NOT the judge and
+	    turn.judgeId !== uid &&
+	    // There is a challenge and
+	    turn.challenge &&
+	    // All players have responded but
+	    ConclaveService.haveAllPlayersResponded() &&
+	    // the judge is not done voting
+	    !turn.isDoneVote;
+    },
+
+    /**
+     * An "isIn" function for determining what state the UI is in.
+     * 
+     * @returns {boolean} Is the current player a respondent awaiting the judge's challenge?
+     */
+    isInRespondentAwaitingChallenge: function() {
+	var uid = Meteor.userId();
+	var turn = ConclaveService.getCurrentTurn();
+
+	return turn && uid &&
+	    // I am not a judge, and
+	    turn.judgeId !== uid &&
+	    // there is no current challenge
+	    !turn.challenge;
+    },
+
+    /**
+     * An "isIn" function for determining what state the UI is in.
+     * 
+     * @returns {boolean} Is the current player a respondent creating a response to a challenge?
+     */
+    isInRespondentResponding: function() {
+	var uid = Meteor.userId();
+	var turn = ConclaveService.getCurrentTurn();
+
+	return turn && uid &&
+	    // I am not a judge, and
+	    turn.judgeId !== uid &&
+	    // there is a challenge, and
+	    turn.challenge &&
+	    // I have not responded
+	    Responses.find({
+		_id: uid,
+		isSubmitted: true
+	    }).count() == 0;
+    },
+
+    /**
+     * An "isIn" function for determining what state the UI is in.
+     * 
+     * @returns {boolean} Is the current player's game over?
+     */
+    isInGameOver: function() {
+	var turn = ConclaveService.getCurrentTurn();
+
+	return turn && Meteor.userId() &&
+	    // Voting is done
+	    turn.isDoneVote;
     }
-  }).forEach(function(resp) {
-    votesLeft = votesLeft - resp.votes;
-  });
-  return votesLeft;
 }
 
 /**
- * @returns {natural} The number of players expected to produce responses.
+ * The possible states of the UI. Each state should have a unique
+ * name (name is a string), the name of the template to display
+ * for the UI (templateName is a string), and a to: function
+ * determine whether the user is in this UI state (isIn is a
+ * zero-argument function producing a boolean).
  */
-function _getNumResponders() {
-  return Responses.find({}).count();
-}
-
-/**
- * @returns {natural} The number of responses expected per player.
- */
-function _getNumResponsesPerPlayer() {
-  // TODO: set up 3-player games to take in 2 responses per player.
-  //return _getNumResponders() < 3 ? 2 : 1;
-  return 1;
-}
-
-/**
- * @returns {natural} The total number of expected responses.
- */
-function _getNumExpectedResponses() {
-  return _getNumResponsesPerPlayer() * _getNumResponders();
-}
-
-/**
- * @returns {boolean} Have all players expected to respond submitted responses?
- */
-function haveAllPlayersResponded() {
-  var turn = getCurrentTurn();
-
-  // Double-check:
-  // 1) No one is listed as unsubmitted.
-  // 2) Everyone is listed as submitted.
-  return turn &&
-    Responses.find({
-      isSubmitted: false
-    }).count() === 0 &&
-    (Players.find({ // non-judges
-      _id: {
-        $ne: turn.judgeId
-      }
-    }).map(elt => Responses.find({ // that have submitted (count is 1)
-      _id: elt._id,
-      isSubmitted: true
-    }).count() === 1).every(x => x));
-}
-
-/**
- * An "isIn" function for determining what state the UI is in.
- * 
- * @returns {boolean} Is the current player the judge in the process of making the challenge?
- */
-function isInJudgeMakingChallenge() {
-  // To be in "judge making challenge" state:
-  // + This player is the judge
-  // + There is no challenge yet
-  // ASSUMPTION: only one turn.
-  var turn = getCurrentTurn();
-  var uid = Meteor.userId();
-
-  return turn && uid &&
-    // I am the judge, and
-    turn.judgeId === uid &&
-    // There is no challenge
-    !turn.challenge;
-}
-
-/**
- * An "isIn" function for determining what state the UI is in.
- * 
- * @returns {boolean} Is the user in need of authentication before proceeding?
- */
-function isInAuthenticating() {
-  return !Meteor.userId();
-}
-
-/**
- * An "isIn" function for determining what state the UI is in.
- * 
- * @returns {boolean} Is the user looking for a game to participate in?
- */
-function isInFindingGame() {
-  // ASSUMPTION: all players are in a single game.
-  // Then, if we're in players, we're in a game.
-
-  var uid = Meteor.userId();
-
-  return uid &&
-    // I am not a player.
-    (Players.find({
-      _id: uid
-    }).count() === 0);
-}
-
-/**
- * An "isIn" function for determining what state the UI is in.
- * 
- * @returns {boolean} Is the current player the judge awaiting outstanding responses to their challenge?
- */
-function isInJudgeAwaitingResponses() {
-  var uid = Meteor.userId();
-  var turn = getCurrentTurn();
-
-  return turn && uid &&
-    // I am a judge, and
-    (turn.judgeId === uid) &&
-    // There is a challenge, but
-    turn.challenge &&
-    // not all players have responded.
-    !haveAllPlayersResponded();
-}
-
-/**
- * An "isIn" function for determining what state the UI is in.
- * 
- * @returns {boolean} Is the current player the judge in the process of voting on submitted responses?
- */
-function isInJudgeVoting() {
-  var uid = Meteor.userId();
-  var turn = getCurrentTurn();
-
-  return turn && uid &&
-    // I am the judge and
-    turn.judgeId === uid &&
-    // There is a challenge and
-    turn.challenge &&
-    // All players have responded but
-    haveAllPlayersResponded() &&
-    // I am not done voting
-    !turn.isDoneVote;
-}
-
-/**
- * An "isIn" function for determining what state the UI is in.
- * 
- * @returns {boolean} Is the current player a respondent awaiting the judge's votes on responses?
- */
-function isInRespondentAwaitingVoting() {
-  var uid = Meteor.userId();
-  var turn = getCurrentTurn();
-
-  return turn && uid &&
-    // I am NOT the judge and
-    turn.judgeId !== uid &&
-    // There is a challenge and
-    turn.challenge &&
-    // All players have responded but
-    haveAllPlayersResponded() &&
-    // the judge is not done voting
-    !turn.isDoneVote;
-}
-
-/**
- * An "isIn" function for determining what state the UI is in.
- * 
- * @returns {boolean} Is the current player a respondent awaiting the judge's challenge?
- */
-function isInRespondentAwaitingChallenge() {
-  var uid = Meteor.userId();
-  var turn = getCurrentTurn();
-
-  return turn && uid &&
-    // I am not a judge, and
-    turn.judgeId !== uid &&
-    // there is no current challenge
-    !turn.challenge;
-}
-
-/**
- * An "isIn" function for determining what state the UI is in.
- * 
- * @returns {boolean} Is the current player a respondent creating a response to a challenge?
- */
-function isInRespondentResponding() {
-  var uid = Meteor.userId();
-  var turn = getCurrentTurn();
-
-  return turn && uid &&
-    // I am not a judge, and
-    turn.judgeId !== uid &&
-    // there is a challenge, and
-    turn.challenge &&
-    // I have not responded
-    Responses.find({
-      _id: uid,
-      isSubmitted: true
-    }).count() == 0;
-}
-
-/**
- * An "isIn" function for determining what state the UI is in.
- * 
- * @returns {boolean} Is the current player's game over?
- */
-function isInGameOver() {
-  var turn = getCurrentTurn();
-
-  return turn && Meteor.userId() &&
-    // Voting is done
-    turn.isDoneVote;
-}
-
-/**
- * The possible states of the UI. Each state should have a unique name (name is a string), the name of the template to display for the UI (templateName is a string), and a function to determine whether the user is in this UI state (isIn is a zero-argument function producing a boolean).
- */
-var UI_STATES = {
-  JUDGE_MAKING_CHALLENGE: {
-    name: "Making challenge",
-    templateName: "makeChallenge",
-    isIn: isInJudgeMakingChallenge
-  },
-  AUTHENTICATING: {
-    name: "Logging in",
-    templateName: "nobody",
-    isIn: isInAuthenticating
-  },
-  FINDING_GAME: {
-    name: "Finding a game",
-    templateName: "join",
-    isIn: isInFindingGame
-  },
-  RESPONDENT_AWAITING_CHALLENGE: {
-    name: "Waiting for judge to issue challenge",
-    templateName: "wait",
-    isIn: isInRespondentAwaitingChallenge
-  },
-  RESPONDENT_AWAITING_VOTING: {
-    name: "Waiting for judge to cast votes",
-    templateName: "wait",
-    isIn: isInRespondentAwaitingVoting
-  },
-  JUDGE_AWAITING_RESPONSES: {
-    name: "Waiting for players to respond",
-    templateName: "judgeAwaitsResponses",
-    isIn: isInJudgeAwaitingResponses
-  },
-  JUDGE_VOTING: {
-    name: "Voting on responses",
-    templateName: "voteOnResponses",
-    isIn: isInJudgeVoting
-  },
-  RESPONDENT_RESPONDING: {
-    name: "Making a response",
-    templateName: "makeResponse",
-    isIn: isInRespondentResponding
-  },
-  GAME_OVER: {
-    name: "Game over",
-    templateName: "endGame",
-    isIn: isInGameOver
-  },
-  /**
-   * Never supposed to be produced. I have it here in hopes that I'll default to it if all else fails!
-   */
-  CONFUSED: {
-    name: "Confused",
-    templateName: "confused",
-    isIn: function() {
-      return true;
+UI_STATES = {
+    JUDGE_MAKING_CHALLENGE: {
+	name: "Making challenge",
+	templateName: "makeChallenge",
+	isIn: ConclaveService.isInJudgeMakingChallenge
+    },
+    AUTHENTICATING: {
+	name: "Logging in",
+	templateName: "nobody",
+	isIn: ConclaveService.isInAuthenticating
+    },
+    FINDING_GAME: {
+	name: "Finding a game",
+	templateName: "join",
+	isIn: ConclaveService.isInFindingGame
+    },
+    RESPONDENT_AWAITING_CHALLENGE: {
+	name: "Waiting for judge to issue challenge",
+	templateName: "wait",
+	isIn: ConclaveService.isInRespondentAwaitingChallenge
+    },
+    RESPONDENT_AWAITING_VOTING: {
+	name: "Waiting for judge to cast votes",
+	templateName: "wait",
+	isIn: ConclaveService.isInRespondentAwaitingVoting
+    },
+    JUDGE_AWAITING_RESPONSES: {
+	name: "Waiting for players to respond",
+	templateName: "judgeAwaitsResponses",
+	isIn: ConclaveService.isInJudgeAwaitingResponses
+    },
+    JUDGE_VOTING: {
+	name: "Voting on responses",
+	templateName: "voteOnResponses",
+	isIn: ConclaveService.isInJudgeVoting
+    },
+    RESPONDENT_RESPONDING: {
+	name: "Making a response",
+	templateName: "makeResponse",
+	isIn: ConclaveService.isInRespondentResponding
+    },
+    GAME_OVER: {
+	name: "Game over",
+	templateName: "endGame",
+	isIn: ConclaveService.isInGameOver
+    },
+    /**
+     * Never supposed to be produced. I have it here in hopes that I'll default to it if all else fails!
+     */
+    CONFUSED: {
+	name: "Confused",
+	templateName: "confused",
+	isIn: function() {
+	    return true;
+	}
     }
-  }
-};
-
+}
 
 
 Meteor.methods({
@@ -386,7 +396,7 @@ if (Meteor.isClient) {
    * Global helper.
    * @returns {natural} The number of votes left to cast in the current turn.
    */
-  Template.registerHelper("getVotesRemaining", _getVotesRemaining);
+  Template.registerHelper("getVotesRemaining", ConclaveService.getVotesRemaining);
 
   /**
    * @function areAllVotesIn
@@ -395,7 +405,7 @@ if (Meteor.isClient) {
    * @returns {boolean} Has the judge allocated all their available votes?
    */
   Template.registerHelper("areAllVotesIn", function() {
-    return _getVotesRemaining() == 0;
+    return ConclaveService.getVotesRemaining() == 0;
   });
 
   /**
@@ -404,7 +414,7 @@ if (Meteor.isClient) {
    * Global helper.
    * @returns {natural} The number of responses expected per player.
    */
-  Template.registerHelper("getNumResponsesPerPlayer", _getNumResponsesPerPlayer);
+  Template.registerHelper("getNumResponsesPerPlayer", ConclaveService.getNumResponsesPerPlayer);
 
   Template.body.helpers({
     /**
@@ -413,9 +423,9 @@ if (Meteor.isClient) {
      * @returns {?string} the name of the template to use to display the current state of the game
      */
     getCurrentTemplate: function() {
-      for (var uiState in UI_STATES) {
-        if (UI_STATES[uiState].isIn())
-          return UI_STATES[uiState].templateName;
+      for (var uiState in ConclaveService.UI_STATES) {
+        if (ConclaveService.UI_STATES[uiState].isIn())
+          return ConclaveService.UI_STATES[uiState].templateName;
       }
       return null;
     }
@@ -435,7 +445,7 @@ if (Meteor.isClient) {
      * @returns {natural} the total number of responses expected in the current turn
      */
     getNumExpectedResponses: function() {
-      return _getNumExpectedResponses();
+      return ConclaveService.getNumExpectedResponses();
     }
   });
   Template.join.events({
@@ -444,7 +454,7 @@ if (Meteor.isClient) {
      */
     "click .join": function(event) {
       var uid = Meteor.userId();
-      var turn = getCurrentTurn();
+      var turn = ConclaveService.getCurrentTurn();
       console.log(Players.insert({
         _id: uid
       }));
@@ -454,7 +464,7 @@ if (Meteor.isClient) {
       console.log(Meteor.call("tryBecomeJudge"));
 
       // Refetch the turn to see if I'm judge and to get the updated turn document.
-      turn = getCurrentTurn();
+      turn = ConclaveService.getCurrentTurn();
 
       // If I'm not the judge, prep my response row:
       if (turn.judgeId !== uid) {
@@ -474,7 +484,7 @@ if (Meteor.isClient) {
      * @returns {?string} the text of this turn's challenge
      */
     getChallenge: function() {
-      var turn = getCurrentTurn();
+      var turn = ConclaveService.getCurrentTurn();
       return turn && turn.challenge;
     }
   });
@@ -555,7 +565,7 @@ if (Meteor.isClient) {
       //
       // See discussion in unvote and vote clicks about the possibility of
       // having vote objects, which might help.
-      var turn = getCurrentTurn();
+      var turn = ConclaveService.getCurrentTurn();
 
       Turns.update({
         _id: turn._id
@@ -649,7 +659,7 @@ if (Meteor.isClient) {
       // Get value from form element
       var text = event.target.text.value;
 
-      var turn = getCurrentTurn();
+      var turn = ConclaveService.getCurrentTurn();
       console.log(Turns.update({
         _id: turn._id
       }, {
