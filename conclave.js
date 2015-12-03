@@ -86,9 +86,9 @@ ConclaveService = {
     haveAllPlayersResponded: function() {
 	var turn = ConclaveService.getCurrentTurn();
 
-	// Double-check:
-	// 1) No one is listed as unsubmitted.
-	// 2) Everyone is listed as submitted.
+	// Double-check that:
+	// 1) No one is listed as unsubmitted, and
+	// 2) everyone is listed as submitted.
 	return turn &&
 	    Responses.find({
 		isSubmitted: false
