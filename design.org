@@ -99,44 +99,42 @@ Player:
 * Pass at Big Model
 
 Game:
-+ id
++ _id
 + name
 + password (clear!)
 + expected number of players
 + 3+ players (until = expected number, pre-game; then set order and current turn)
 + vote count 
 + win threshold
-+ turn (current turn)
++ turn (current turn _id; also encodes round # and judge ID)
 + creation time
 + last update time
 
 
 Player:
 + id
-+ order #
 + name
 
+GamePerPlayer:
++ _id = { game: game _id, player: player _id }
++ order #
++ score (cache; recoverable from other records)
+
 Turn:
-+ game id
-+ round number
-+ player order # (judge)
++ _id = { game: game _id, round: #, judge: player _id}
 + prompt (null -> none yet)
-+ 2+ responses (not present -> not done)
 + creation time
 + last update time
 + deadline time (or none; only for responses? or judge loses 6 points
   if misses deadline?)
 
 Response:
-+ game id
-+ round number
-+ player order # (judge)
-+ player order # (respondent)
-+ judging order #
-+ response (null or row is not present? -> none yet)
++ id = { turn: turn _id (includes judge!), player: player _id}
++ response (non-null)
++ order #
 + vote count
-+ creation time
 + submitted?
++ creation time
 + last update time, response
 + last update time, vote
 
