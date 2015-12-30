@@ -19,12 +19,38 @@
 // list that sits inside a document?  
 
 
-// Stripped down version assumptions:
-// + All players are in the game
-// + All players except the judge are responders
-// + There is only one turn
-// + Judging order is by player ID
-Players = new Mongo.Collection("players"); /* _id (Meteor.userId()) */
+// Note: because validation with an _id may be a pain, I may want to 
+// make an _id-less version of each schema (or at least the ones w/ObjectId's for
+// their _ids) and then use new SimpleSchema([base, new SimpleSchema(...)]) to
+// create the "real" schema to be attached to the collection.
+
+/******************** GAMES SETUP **************************/
+Games = new Mongo.Collection("games");
+Games.schema = new SimpleSchema({
+  // TODO  
+  _id : {type : Meteor.Collection.ObjectId},
+  name : {type : String},
+  password : {type : String}, // IN THE CLEAR!
+  expectedPlayerCount : {type : 
++ 3+ players (until = expected number, pre-game; then set order and current turn)
++ vote count 
++ win threshold
++ turn (current turn _id; also encodes round # and judge ID)
++ creation time
++ last update time
+
+});
+Games.attachSchema(Games.schema);
+
+/******************** PLAYERS SETUP **************************/
+Players = new Mongo.Collection("players");
+Players.schema = new SimpleSchema({
+  _id : {type : Meteor.Collection.ObjectId},
+  name : {type : String},
+});
+Players.attachSchema(Players.schema);
+
+
 Turns = new Mongo.Collection("turns"); /* _id, judgeId, challenge, isDoneVote  */ // Presently JUST ONE
 Responses = new Mongo.Collection("responses"); /* _id (Meteor.userId() of respondent), text, votes, isSubmitted */
 

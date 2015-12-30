@@ -24,3 +24,5 @@ sanjo:jasmine
 velocity:console-reporter
 velocity:html-reporter
 meteortoys:allthings
+aldeed:simple-schema
+aldeed:collection2

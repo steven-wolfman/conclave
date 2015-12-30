@@ -1,5 +1,7 @@
 * Extra packages worth having
 + Added: meteor add accounts-ui accounts-password
++ Added: aldeed:simple-schema to set up schema for the DB
+  + Also: aldeed:collection2 for auto-validation on mutating operations (addSchema)
 + For testing: sanjo:jasmine and various velocity packages
   + meteor add sanjo:jasmine
   + meteor add velocity:html-reporter
