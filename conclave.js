@@ -1,4 +1,9 @@
-/* global Mongo */
+/*global
+    Mongo, SimpleSchema,
+    Games, Turns, Players, GamePerPlayers, Responses,
+    ConclaveService
+*/
+
 
 // TODO: MongoDB allows nested "databases" (?). May want to try that out for responses, if nothing else.
 // In fact, may want a whole game to be one big nesty thingy. Both documents and arrays can nest.
@@ -24,36 +29,92 @@
 // their _ids) and then use new SimpleSchema([base, new SimpleSchema(...)]) to
 // create the "real" schema to be attached to the collection.
 
-/******************** GAMES SETUP **************************/
 Games = new Mongo.Collection("games");
+Players = new Mongo.Collection("players");
+GamePerPlayers = new Mongo.Collection("gameperplayers");
+Turns = new Mongo.Collection("turns"); /* _id, judgeId, challenge, isDoneVote  */ // Presently JUST ONE
+Responses = new Mongo.Collection("responses"); /* _id (Meteor.userId() of respondent), text, votes, isSubmitted */
+
+
+/******************** SHARED SCHEMAS ***********************/
+GamePerPlayers.primaryKeySchema = new SimpleSchema({
+  game : { type : Meteor.Collection.ObjectId },
+  player : { type : Meteor.Collection.ObjectId },
+});
+Turns.primaryKeySchema = new SimpleSchema({
+  game : { type : Meteor.Collection.ObjectId },
+  round : { type : Number, min : 1 },
+  judge : { type : Meteor.Collection.ObjectId },
+});
+Responses.primaryKeySchema = new SimpleSchema({
+  turn : { type : Turns.primaryKeySchema },
+  player : { type : Meteor.Collection.ObjectId },
+});
+
+/******************** GAMES SETUP **************************/
 Games.schema = new SimpleSchema({
-  // TODO  
   _id : {type : Meteor.Collection.ObjectId},
   name : {type : String},
   password : {type : String}, // IN THE CLEAR!
-  expectedPlayerCount : {type : 
-+ 3+ players (until = expected number, pre-game; then set order and current turn)
-+ vote count 
-+ win threshold
-+ turn (current turn _id; also encodes round # and judge ID)
-+ creation time
-+ last update time
-
+  expectedPlayerCount : {
+    type : Number, // defaults to integer in simple-schema
+    min : 2, // probably want to change to 3 later
+  }, // TODO: constrain to integer >= 3??
+  votes : {
+    type : Number, // defaults to integer in simple-schema
+    min : 1,
+    defaultValue : 6,
+  },
+  winThreshold : {
+    type : Number, // defaults to integer in simple-schema
+    min : 1,
+    defaultValue : (6*2), // two rounds of winning everything
+  },
+  turn : { type : Turns.primaryKeySchema }, // encodes game ID, round #, and judge ID
+  // Skipping: creation time; note: embedded in each ObjectId (sort of)
+  // Skipping: last update time
 });
 Games.attachSchema(Games.schema);
 
 /******************** PLAYERS SETUP **************************/
-Players = new Mongo.Collection("players");
 Players.schema = new SimpleSchema({
   _id : {type : Meteor.Collection.ObjectId},
   name : {type : String},
 });
 Players.attachSchema(Players.schema);
 
+/******************** GAMEPERPLAYERS SETUP *******************/
+GamePerPlayers.schema = new SimpleSchema({
+  _id : { type : GamePerPlayers.primaryKeySchema },
+  order : { type : Number, min : 0 },
+  // Skipping: score (cache; recoverable from other records)
+});
+GamePerPlayers.attachSchema(GamePerPlayers.schema);
 
-Turns = new Mongo.Collection("turns"); /* _id, judgeId, challenge, isDoneVote  */ // Presently JUST ONE
-Responses = new Mongo.Collection("responses"); /* _id (Meteor.userId() of respondent), text, votes, isSubmitted */
+/******************** TURNS SETUP *****************************/
+Turns.schema = new SimpleSchema({
+  _id : { type : Turns.primaryKeySchema },
+  prompt : { type : String, optional : true },
+  // Skipped: creation time; NOT present in the _id
+  // Skipped: last update time
+  // Skipped: deadline time (or none; only for responses? or judge loses 6 points if misses deadline?)
+});
+Turns.attachSchema(Turns.schema);
 
+/******************** RESPONSES SETUP *************************/
+Responses.schema = new SimpleSchema({
+  _id : { type : Responses.primaryKeySchema },
+  response : { type : String },
+  order : { type : Number, min : 0 },
+  votes : { type : Number, min : 0, defaultValue : 0 },
+  submitted : { type : Boolean },
+  // Skipped: creation time; NOT present in the _id
+  // Skipped: last update time, response
+  // Skipped: last update time, vote
+});
+Responses.attachSchema(Responses.schema);
+
+// TODO: update DB usage to follow defined schemas!
 
 // Following
 // https://github.com/meteor-velocity/velocity-examples/blob/master/leaderboard-jasmine/leaderboard.js:
